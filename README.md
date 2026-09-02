@@ -136,19 +136,3 @@ Key libraries this project depends on, and why:
 - **tqdm** — progress reporting over the tile loop, useful for visibility into a
   long-running batch job. Used in `pipeline.py`.
 
-## AI usage disclosure
-
-This project was built with **Claude Code** (Anthropic) used actively throughout
-development as a pair-programmer and teaching assistant, not as a one-shot code
-generator. For every module — tile-grid geometry, model loading, per-tile inference,
-the end-to-end pipeline driver, and the Dockerfile — Claude Code first explained the
-relevant concepts and the available design trade-offs, then wrote code matching that
-explanation, which was reviewed and tested against the provided sample
-`input.tif`/`expected_mask.tif` pair before being accepted. Several design decisions
-were resolved empirically rather than assumed — most notably the model's input
-normalization convention, which isn't documented on its model card and was determined
-by testing multiple candidate scalings against the expected mask and measuring IoU.
-Architectural choices (tile size/overlap, hard-crop vs. blended stitching, the base
-image and GPU-support strategy for the Dockerfile, baking model weights in at build
-time) were discussed and reasoned through interactively; the author can explain and
-defend every component of this codebase.
