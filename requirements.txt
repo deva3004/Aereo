@@ -1,0 +1,8 @@
+# Provisional — will pin exact versions once the model-loading module confirms
+# what the HF checkpoint actually needs (framework, encoder lib version, etc.)
+rasterio
+numpy
+torch
+segmentation-models-pytorch
+huggingface_hub
+tqdm

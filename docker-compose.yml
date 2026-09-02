@@ -1,0 +1,16 @@
+services:
+  waterseg:
+    build: .
+    image: waterbody-segmentation:latest
+    volumes:
+      - ./data:/data
+    command: ["--input", "/data/input.tif", "--output", "/data/output.tif"]
+    # GPU passthrough — uncomment once the Dockerfile/device-handling module lands
+    # and there's an NVIDIA runtime available to test against.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

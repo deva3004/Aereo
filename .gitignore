@@ -1,0 +1,22 @@
+# data (mounted at runtime, not committed — sample files can be large)
+data/*
+!data/.gitkeep
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# model weights cache (downloaded at build/run time, not committed)
+weights/
+*.pt
+*.pth
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+problems.md
+learnings.md
