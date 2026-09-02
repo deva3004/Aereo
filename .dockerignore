@@ -1,0 +1,7 @@
+.git/
+.venv/
+data/
+learnings.md
+problems.md
+claude.md
+README.md

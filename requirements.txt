@@ -1,8 +1,6 @@
-# Provisional — will pin exact versions once the model-loading module confirms
-# what the HF checkpoint actually needs (framework, encoder lib version, etc.)
-rasterio
-numpy
-torch
-segmentation-models-pytorch
-huggingface_hub
-tqdm
+rasterio==1.4.3
+numpy==2.0.2
+torch==2.8.0
+segmentation-models-pytorch==0.5.0
+huggingface_hub==1.8.0
+tqdm==4.70.0
