@@ -34,13 +34,12 @@ docker compose run --rm waterseg
 ```
 
 This builds from the `Dockerfile`, mounts `./data` to `/data` in the container, and
-runs the pipeline against `/data/input.tif`, writing `/data/output.tif`. GPU
-passthrough is disabled by default in `docker-compose.yml` — uncomment the `deploy.
-resources` block there to enable it (requires the NVIDIA Container Toolkit on the
-host).
+runs the pipeline against `/data/input.tif`, writing `/data/output.tif`. This compose
+service is CPU-only (no GPU reservation is declared) — it was the path used for local
+development on a machine with no NVIDIA GPU. For a GPU run, use the plain `docker run`
+form below directly.
 
-Equivalent plain `docker run` invocation (this is also the exact command the
-submission is evaluated against):
+The exact command the submission is evaluated against:
 
 ```bash
 docker run --gpus all -v /path/to/data:/data waterbody-segmentation:latest \
@@ -135,4 +134,20 @@ Key libraries this project depends on, and why:
   cropping) between rasterio and torch. Used in `inference.py`.
 - **tqdm** — progress reporting over the tile loop, useful for visibility into a
   long-running batch job. Used in `pipeline.py`.
+
+## AI usage disclosure
+
+This project was built by me, with Claude Code used as a research assistant and
+pair-programming mentor throughout — not as a code generator I copy-pasted from. For
+each module (tiling, model loading, the inference loop, stitching, GeoTIFF I/O, the
+Dockerfile, docker-compose), I had it first explain the relevant concepts (e.g. what a
+rasterio `Window` is, why tile overlap avoids boundary artifacts, how CRS/transform
+metadata has to propagate to the output raster, what "device-agnostic" means for
+`torch.cuda.is_available()`) and walk through the design trade-offs before any code
+was written, so I could reason about and defend the decisions myself rather than just
+accept output. It was also used to debug problems as they came up (e.g. tile-boundary
+mismatches, a Docker GPU/base-image issue) by explaining root causes rather than just
+supplying a fix. ChatGPT was used in a similar supporting capacity — mainly for quick
+research and clarifying questions on rasterio/GeoTIFF and PyTorch concepts while
+working through the assignment. I wrote and understand the resulting code end to end.
 
