@@ -1,10 +1,3 @@
-"""Tile-grid geometry for sliding-window inference over a large raster.
-
-Given a raster's width/height, produces the read window (with context margin)
-and corresponding write window (the non-overlapping core) for every tile —
-pure pixel-coordinate math, independent of any actual raster I/O or model.
-"""
-
 from dataclasses import dataclass
 
 from rasterio.windows import Window

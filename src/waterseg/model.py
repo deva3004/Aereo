@@ -1,9 +1,8 @@
-"""Loads the pretrained water-segmentation checkpoint from the Hugging Face Hub."""
 
 import json
 
 import segmentation_models_pytorch as smp # build the Unet++ model with EfficientNet-B4 encoder
-import torch
+import torch # used for loading the model and running inference on the GPU or CPU
 from huggingface_hub import hf_hub_download
 
 REPO_ID = "giswqs/s2-water-unetplusplus-efficientnet-b4"

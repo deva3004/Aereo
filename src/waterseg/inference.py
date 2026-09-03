@@ -1,32 +1,37 @@
-"""Runs the model on a single tile and returns its cropped core prediction."""
-
 import numpy as np
 import torch
 
-# Empirically validated against expected_mask.tif — see problems.md.
 NORMALIZE_SCALE = 255.0
 
 
-def predict_tile(
+def predict_batch(
     model: torch.nn.Module,
     device: torch.device,
-    img: np.ndarray,
+    imgs: list[np.ndarray],
     tile_size: int,
-    core: tuple[slice, slice],
-) -> np.ndarray:
-    """img: (C, h, w) array read from the source raster window (h, w <= tile_size)."""
-    channels, h, w = img.shape
-    img = img.astype(np.float32) / NORMALIZE_SCALE
+    cores: list[tuple[slice, slice]],
+) -> list[np.ndarray]:
+    """imgs: each (C, h, w) array read from a source raster window (h, w <= tile_size).
 
-    if h < tile_size or w < tile_size:
-        padded = np.zeros((channels, tile_size, tile_size), dtype=np.float32)
-        padded[:, :h, :w] = img
-        img = padded
+    Batches tiles into one forward pass for throughput. Numerically identical to
+    predicting each tile alone: model.eval() (set in model.py) makes BatchNorm use
+    fixed running statistics rather than per-batch statistics, so one tile's
+    prediction doesn't depend on what else is in its batch.
+    """
+    padded = []
+    for img in imgs:
+        channels, h, w = img.shape
+        img = img.astype(np.float32) / NORMALIZE_SCALE
+        if h < tile_size or w < tile_size:
+            pad = np.zeros((channels, tile_size, tile_size), dtype=np.float32)
+            pad[:, :h, :w] = img
+            img = pad
+        padded.append(img)
 
-    tensor = torch.from_numpy(img).unsqueeze(0).to(device)
+    batch = np.stack(padded, axis=0)
+    tensor = torch.from_numpy(batch).to(device)
     with torch.no_grad():
         logits = model(tensor)
-        pred = torch.argmax(logits, dim=1).squeeze(0).cpu().numpy().astype(np.uint8)
+        preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
 
-    row_slice, col_slice = core
-    return pred[row_slice, col_slice]
+    return [preds[i][row, col] for i, (row, col) in enumerate(cores)]

@@ -1,17 +1,11 @@
 services:
   waterseg:
     build: .
+
+    platform: linux/amd64 # mine is ARM but targetted is amd64
     image: waterbody-segmentation:latest
     volumes:
       - ./data:/data
-    command: ["--input", "/data/input.tif", "--output", "/data/output.tif"]
-    # GPU passthrough — uncomment on a host with an NVIDIA GPU + NVIDIA Container
-    # Toolkit installed. The pipeline itself is already device-agnostic (see
-    # model.py); this just controls whether a GPU is exposed to the container.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+      
+    command: ["--input", "/data/input.tif", "--output", "/data/output.tif"] #passed at Dockerfile's enterypoint
+  
