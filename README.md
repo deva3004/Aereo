@@ -308,6 +308,16 @@ and CPU-vs-GPU runs — not just "the container ran without error." Verified to
 actually use `--gpus all` when passed (not silently fall back to CPU), and to fall
 back to CPU cleanly with no crash when it isn't.
 
+**Evidence** (real terminal output from the runs above, on the actual GPU machine):
+
+| GPU, `BATCH_SIZE=8` | GPU, `BATCH_SIZE=4` |
+|---|---|
+| ![GPU batch size 8: timing + check.py accuracy](docs/images/batch8.jpeg) | ![GPU batch size 4: timing + check.py accuracy](docs/images/batch4.jpeg) |
+
+| CPU-only timing | CPU-only accuracy |
+|---|---|
+| ![CPU-only wall-clock](docs/images/cpuTime.jpeg) | ![CPU-only check.py accuracy](docs/images/cupAcc.jpeg) |
+
 ## AI usage disclosure
 
 This project was built by me, with Claude Code used as a research assistant and
