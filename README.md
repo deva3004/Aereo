@@ -285,10 +285,23 @@ Full-image comparison against the provided `expected_mask.tif` (165.3M pixels),
 real sample data, exact required invocation shape — **confirmed on real NVIDIA GPU
 hardware**, not just CPU fallback:
 
-| | Pixel accuracy | IoU | Precision | Recall | GPU wall-clock |
+| | Pixel accuracy | IoU | Precision | Recall | Wall-clock |
 |---|---|---|---|---|---|
-| Final (ONNX Runtime) | 99.9407% | 0.9903 | 0.9949 | 0.9954 | ~1:56 |
-| PyTorch (pre-switch, for reference) | 99.941% | 0.99033 | 0.99492 | 0.99536 | ~2 min |
+| GPU, `BATCH_SIZE=8` (current default) | 99.941% | 0.99033 | 0.99491 | 0.99538 | 1:56.1 |
+| GPU, `BATCH_SIZE=4` | 99.941% | 0.99033 | 0.99491 | 0.99538 | 1:57.6 |
+| CPU-only, `BATCH_SIZE=4` | 99.941% | 0.99033 | 0.99492 | 0.99536 | 12:48.5 |
+
+All three on the same physical GPU machine, real 5335×30978 `input.tif`, all 2,562
+tiles, via `check.py`. **GPU is ~6.6x faster than CPU** on this workload (3.34 vs.
+22.6 tiles/sec) — the first real, measured (not extrapolated) number for that.
+Batch size barely matters on this GPU (8 vs. 4 is only ~1.3% apart) — unlike the
+earlier CPU-only tuning, where 4 was ~65% faster than 8. Likely explanation: this
+GPU already saturates around batch size 4, so the remaining bottleneck shifts to
+something batch size doesn't help with (disk I/O or the per-tile numpy
+normalize/pad step, both CPU-bound regardless of where the model runs) — a
+hypothesis from the shape of the numbers, not independently profiled. Accuracy is
+identical across all three (batching doesn't affect correctness, confirmed on the
+actual deployment hardware, not just assumed from BatchNorm being frozen).
 
 Confirmed bit-identical/near-identical across native-vs-Docker, crop-vs-full-scale,
 and CPU-vs-GPU runs — not just "the container ran without error." Verified to
