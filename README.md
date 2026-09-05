@@ -205,80 +205,6 @@ Key libraries this project depends on, and why:
   architecture, load its HF Hub checkpoint, and trace it to ONNX. None of these ship
   in the final image or run at inference time.
 
-## Findings & errors along the way
-
-Real bugs and dead ends hit while building this, and how each was actually resolved
-(full detail with root-cause analysis lives in `problems.md`/`learnings.md`):
-
-- **A silent correctness bug in tile-batching, caught only by checking accuracy.**
-  `preds[i][row][col]` instead of `preds[i][row, col]` — two sequential 1-D slices,
-  not a 2-D index. Wrong shape, but `rasterio` doesn't validate a write's shape
-  against its window, so the pipeline ran clean and produced a plausible-looking
-  output — accuracy silently dropped from ~99.8% to 80.4%. "It ran without error" is
-  not proof of correctness for this pipeline; every change gets re-checked against
-  `expected_mask.tif`, no exceptions.
-- **Pixel normalization wasn't documented anywhere authoritative.** The model card
-  doesn't state it, and the obvious reference implementation's heuristic (`/255.0`)
-  looks wrong for 16-bit Sentinel-2 data (values up to ~14,000). Tested 5 candidate
-  scalings empirically against a real mixed tile instead of trusting intuition —
-  `/255.0` was actually correct (99.41% acc), while the "physically sensible"
-  `/10000.0` reflectance scaling degenerated to predicting water everywhere (51.8%
-  acc). A default that looks naive is a hypothesis to test, not something to accept
-  or reject on sight.
-- **`docker-compose.yml` had never actually been run before it was "done."**
-  Building it (rather than just raw `docker buildx build`) surfaced a real
-  portability gap: no `platform` pin meant it defaulted to native `arm64` on this
-  dev Mac, where `rasterio` has no prebuilt wheel at all (needs GDAL dev headers to
-  compile from source — not installed, build fails outright). Fixed with an
-  explicit `platform: linux/amd64` pin. The exact same class of bug recurred later
-  for `onnxruntime-gpu` — same fix.
-- **Guessed which CUDA libraries were "safe to strip" from the original PyTorch
-  image — guessed wrong, 3 times in a row.** Assumed libraries an op-free forward
-  pass never dispatches to (`cusparselt`, `cufile`, `nccl`) must be lazily loaded
-  and therefore droppable. Each one broke `import torch` outright when removed,
-  even on CPU with no GPU involved — proving torch's Linux wheel preloads its
-  entire CUDA dependency set unconditionally, not per-op. This is what motivated
-  moving to ONNX Runtime instead of continuing to guess at the strip list.
-- **A missing system library only surfaced at `docker run`, not at build time.**
-  `rasterio`'s bundled GDAL dynamically links `libexpat`, absent from
-  `python:3.11-slim`. The build's own sanity check didn't catch it because that
-  check only imported `model.py`, which never imports `rasterio`. Fixed by adding
-  `libexpat1` and widening the build-time check to actually construct an inference
-  session, so this class of bug fails fast at build time going forward.
-- **`docker images`' human-readable size column is not trustworthy on this setup** —
-  it reported a ~7.6GB drop from removing one 542MB package. Real ground truth:
-  `du -sh` inside a running container (actual unpacked size) and
-  `docker save | wc -c` (actual transferable bytes). Even the original "~12GB
-  image" framing this whole optimization effort started from turned out to be
-  measured wrong by the same column.
-- **A CUDA-torch reintroduction bug in the ONNX exporter stage.** The exporter
-  installed CPU-only `torch` via `--index-url .../whl/cpu` in one `pip install`,
-  then `segmentation-models-pytorch` in a second, unpinned one — whose transitive
-  `torchvision` dependency got resolved from default PyPI, silently pulling the
-  *default CUDA* `torch` back in and undoing the CPU-only pin. Fixed by pinning
-  `torchvision` explicitly in the same `--index-url` command as torch.
-- **`onnxruntime-gpu==1.22.0` has no `arm64` Linux wheel at all** (checked PyPI's
-  file list directly) — building unpinned-platform on this arm64 Mac silently
-  offered `1.29.0` instead, which targets CUDA 13, not the CUDA 12 version
-  deliberately chosen to match the proven driver requirement. Same `platform:
-  linux/amd64` compose pin fixed it.
-- **`onnxruntime-gpu` doesn't patch its own RPATH the way `torch`'s wheel does.**
-  Its pip-installed `nvidia-*-cu12` libraries sit in `site-packages/nvidia/.../lib/`,
-  invisible to the dynamic linker without `LD_LIBRARY_PATH` set — so on real GPU
-  hardware, the CUDA provider silently failed to load and fell back to CPU with no
-  obvious error to the untrained eye, running the full pipeline **~6x slower**
-  (12.5 min vs. the proven ~2 min) despite the smaller image. Only caught because
-  that timing mismatch looked wrong; the log alone looked fine.
-- **Fixing that gap uncovered a second, worse bug: a segfault.** Once the CUDA
-  libraries could load, `onnxruntime` proceeded to actually initialize a CUDA
-  context — and without a real GPU driver present (true of every Docker *build*
-  stage, on any host), it **segfaulted** instead of falling back gracefully. The
-  previous "working" CPU fallback had been accidentally safe, for the wrong reason
-  (an earlier, catchable failure point). Fixed by checking for the real driver
-  library (`libcuda.so.1`) directly in `model_onnx.py` before ever requesting the
-  CUDA provider — the same idea as `torch.cuda.is_available()`'s safe probing —
-  instead of trusting `onnxruntime`'s own (unsafe, in this case) internal fallback.
-
 ## Validation results
 
 Full-image comparison against the provided `expected_mask.tif` (165.3M pixels),
@@ -317,6 +243,53 @@ back to CPU cleanly with no crash when it isn't.
 | CPU-only timing | CPU-only accuracy |
 |---|---|
 | ![CPU-only wall-clock](docs/images/cpuTime.jpeg) | ![CPU-only check.py accuracy](docs/images/cupAcc.jpeg) |
+
+## Findings & errors along the way
+
+Real bugs and dead ends hit while building this (full detail with root-cause
+analysis in `problems.md`/`learnings.md`):
+
+- **Batching shape bug, caught only by checking accuracy.** `preds[i][row][col]`
+  (two 1-D slices) instead of `preds[i][row, col]` (one 2-D slice) — wrong shape,
+  but `rasterio` doesn't validate write shapes, so it ran clean while accuracy
+  silently dropped to 80.4%. Every change gets re-checked against
+  `expected_mask.tif`, no exceptions.
+- **Pixel normalization was undocumented.** The obvious heuristic (`/255.0`) looks
+  wrong for 16-bit Sentinel-2 data, but tested empirically against 5 candidates —
+  `/255.0` won (99.41% acc); the "physically sensible" `/10000.0` reflectance
+  scaling degenerated to predicting water everywhere (51.8%).
+- **`docker-compose.yml` had never actually been run.** No `platform` pin meant it
+  defaulted to native `arm64` on this dev Mac, where `rasterio` has no prebuilt
+  wheel — build fails outright. Fixed with `platform: linux/amd64`; the same gap
+  recurred later for `onnxruntime-gpu`.
+- **Guessed which CUDA libraries were "safe to strip" — wrong 3 times in a row.**
+  `cusparselt`, `cufile`, `nccl` were each assumed lazily-loaded and droppable;
+  each broke `import torch` outright on CPU. PyTorch's Linux wheel preloads its
+  entire CUDA dependency set unconditionally — this is what motivated the switch
+  to ONNX Runtime.
+- **A missing system library only surfaced at `docker run`, not build time.**
+  `rasterio`'s bundled GDAL needs `libexpat`, absent from `python:3.11-slim` — the
+  build check didn't catch it because it only imported `model.py`, which never
+  imports `rasterio`. Fixed by adding `libexpat1` and widening the check.
+- **`docker images`' size column isn't trustworthy here** — reported a ~7.6GB drop
+  from removing one 542MB package. Real ground truth: `du -sh` inside a container,
+  or `docker save | wc -c`.
+- **A CUDA-torch reintroduction bug in the ONNX exporter.** A second, unpinned
+  `pip install` let `torchvision`'s transitive dependency pull default CUDA
+  `torch` back in, undoing the CPU-only pin. Fixed by pinning `torchvision` in the
+  same `--index-url` command.
+- **`onnxruntime-gpu==1.22.0` has no `arm64` wheel at all** — building unpinned on
+  this Mac silently offered `1.29.0` (CUDA 13, not the CUDA 12 we needed). Same
+  `platform: linux/amd64` fix.
+- **`onnxruntime-gpu` doesn't patch its own RPATH like `torch` does.** Its
+  pip-installed CUDA libraries were invisible to the linker without
+  `LD_LIBRARY_PATH` — silently fell back to CPU on real GPU hardware, ~6x slower,
+  with no obvious error. Only caught because the timing looked wrong.
+- **Fixing that uncovered a worse bug: a segfault.** Once the CUDA libraries could
+  load, `onnxruntime` tried to actually initialize a CUDA context — and segfaulted
+  when no real driver was present (true of every build stage). Fixed by checking
+  for `libcuda.so.1` directly before ever requesting the CUDA provider, instead of
+  trusting onnxruntime's own fallback.
 
 ## AI usage disclosure
 
