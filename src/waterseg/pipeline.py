@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 TILE_SIZE = 512
 OVERLAP = 256
-# Empirically tuned on real GPU hardware - see learnings.md. 8 measured ~1.3%
-# faster than 4 on the actual deployment target (116.1s vs 117.6s full-image,
+# Empirically tuned on real GPU hardware - see the README's "Validation results".
+# 8 measured ~1.3% faster than 4 on the actual deployment target (116.1s vs 117.6s,
 # identical accuracy) - a much smaller gap than the CPU-only tuning found (4 was
 # ~65% faster than 8 there), suggesting this GPU already saturates around batch
 # size 4 and the remaining bottleneck is elsewhere (I/O/preprocessing, not

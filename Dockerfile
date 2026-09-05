@@ -1,7 +1,7 @@
 # ONNX Runtime backend - built after the original PyTorch-only image hit a hard
 # size ceiling (torch's Linux wheel unconditionally preloads its entire CUDA
-# dependency graph; see problems.md/learnings.md for the full saga and the
-# accuracy/perf numbers that justified switching to this stack entirely).
+# dependency graph; see the README's "Why ONNX Runtime" section for the full
+# saga and the accuracy/perf numbers that justified switching to this stack).
 
 # ---- Builder stage: exports the pretrained model to ONNX. Needs torch +
 # segmentation-models-pytorch + huggingface_hub + onnx to construct and trace the
@@ -30,9 +30,9 @@ COPY src/ ./src/
 RUN python -c "from src.waterseg.export_onnx import export; export('/export/model.onnx')"
 
 # ---- Runtime stage: only what's needed to actually run inference.
-# onnxruntime-gpu's own dependency metadata (unlike torch's - see problems.md)
-# only pulls cuDNN/cuBLAS/cuFFT/cuRAND/nvrtc via opt-in [cuda,cudnn] extras, not
-# an unconditional preload of the full CUDA toolkit's worth of libraries. Pinned
+# onnxruntime-gpu's own dependency metadata only pulls cuDNN/cuBLAS/cuFFT/cuRAND/
+# nvrtc via opt-in [cuda,cudnn] extras - unlike torch, which unconditionally
+# preloads its entire CUDA toolkit's worth of libraries regardless of need. Pinned
 # to 1.22.0 deliberately: it's the version confirmed (by inspecting its actual
 # pip metadata, not assumed) to target CUDA 12 - matching the driver requirement
 # already proven to work, rather than newer releases that moved to CUDA 13.
@@ -74,11 +74,11 @@ COPY src/ ./src/
 # Actually constructs an InferenceSession (not just imports the module) - this
 # only proves the CPU-fallback path works, since no build stage ever gets GPU
 # access (on any host, `docker build` never passes through `--gpus all`).
-# It does NOT prove the CUDA path works - that segfaulted here once already
-# (see problems.md) until model_onnx.py added a real driver-presence check
-# instead of trusting onnxruntime's own provider-availability check. Real CUDA
-# execution was separately verified with `docker run --gpus all` on actual GPU
-# hardware - see learnings.md/README for those numbers.
+# It does NOT prove the CUDA path works - that segfaulted here once (fixed by
+# model_onnx.py's real driver-presence check, instead of trusting onnxruntime's
+# own provider-availability check). Real CUDA execution was separately verified
+# with `docker run --gpus all` on actual GPU hardware - see the README's
+# "Validation results" for those numbers.
 RUN python -c "from src.waterseg.model_onnx import get_providers, load_session; load_session('model.onnx', get_providers())"
 
 ENTRYPOINT ["python", "-m", "src.waterseg.cli"]

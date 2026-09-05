@@ -1,9 +1,9 @@
 """Compares a predicted mask against the ground-truth mask, pixel-for-pixel.
 
-This is the actual correctness bar the project runs against every change - see
-problems.md's very first entry, where a real bug (a batching shape mistake)
-produced a plausible-looking output that "ran without error" but was silently
-wrong. A clean run is not evidence of a correct one; this script is.
+This is the actual correctness bar the project runs against every change - a
+real batching bug once produced a plausible-looking output that "ran without
+error" but was silently wrong (see the README's "Findings & errors"). A clean
+run is not evidence of a correct one; this script is.
 
 Usage:
     python check.py                                   # data/output.tif vs data/expected_mask.tif

@@ -193,8 +193,6 @@ cleanly with no crash when it isn't.
 
 ## Findings & errors along the way
 
-Full root-cause detail in `problems.md`/`learnings.md`:
-
 - **Batching shape bug, caught only by checking accuracy.** `preds[i][row][col]`
   (two 1-D slices) instead of `preds[i][row, col]` — wrong shape, but `rasterio`
   doesn't validate write shapes, so it ran clean while accuracy silently dropped to
