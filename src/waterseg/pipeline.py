@@ -1,4 +1,5 @@
 import itertools
+import logging
 import os
 
 import rasterio
@@ -7,6 +8,8 @@ from tqdm import tqdm
 from .inference import predict_batch
 from .model_onnx import get_providers, load_session
 from .tiling import generate_tiles
+
+logger = logging.getLogger(__name__)
 
 TILE_SIZE = 512
 OVERLAP = 256
@@ -39,20 +42,22 @@ def run(input_path: str, output_path: str) -> None:
     the read/write window and overlap-crop geometry this loops over.
     """
     providers = get_providers()
-    print(f"Using providers: {providers}")
+    logger.info("Using providers: %s", providers)
     session = load_session(ONNX_MODEL_PATH, providers)
 
     try:
         src_context = rasterio.open(input_path)
     except rasterio.errors.RasterioIOError as e:
-        raise SystemExit(f"Could not open input as a raster: {input_path} ({e})")
+        logger.error("Could not open input as a raster: %s (%s)", input_path, e)
+        raise SystemExit(1)
 
     with src_context as src:
         if src.count != EXPECTED_CHANNELS:
-            raise SystemExit(
-                f"Expected {EXPECTED_CHANNELS} bands (Sentinel-2 B2,B3,B4,B8,B11,B12), "
-                f"got {src.count} in {input_path}"
+            logger.error(
+                "Expected %d bands (Sentinel-2 B2,B3,B4,B8,B11,B12), got %d in %s",
+                EXPECTED_CHANNELS, src.count, input_path,
             )
+            raise SystemExit(1)
 
         profile = src.profile.copy()
         profile.update(count=1, dtype="uint8", nodata=None)
@@ -62,7 +67,8 @@ def run(input_path: str, output_path: str) -> None:
         try:
             dst_context = rasterio.open(output_path, "w", **profile)
         except rasterio.errors.RasterioIOError as e:
-            raise SystemExit(f"Could not open output path for writing: {output_path} ({e})")
+            logger.error("Could not open output path for writing: %s (%s)", output_path, e)
+            raise SystemExit(1)
 
         with dst_context as dst:
             with tqdm(total=len(tiles), desc="Processing tiles") as pbar:
