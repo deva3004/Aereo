@@ -1,0 +1,62 @@
+# Separate from the working Dockerfile on purpose - see problems.md/learnings.md
+# for the CUDA-library saga that motivated this alternative backend. Nothing here
+# touches the proven PyTorch path; this can be deleted entirely with zero impact
+# on it.
+
+# ---- Builder stage: exports the pretrained model to ONNX. Needs torch +
+# segmentation-models-pytorch + huggingface_hub + onnx to construct and trace the
+# model - none of this ships in the final image. CPU-only torch wheel here:
+# tracing for export needs no CUDA at all, so even this discarded stage avoids
+# the ~5GB CUDA dependency graph rather than needlessly downloading it.
+FROM python:3.11-slim AS exporter
+
+WORKDIR /export
+
+# --index-url replaces the default PyPI index for the WHOLE command, not just the
+# package named next to it - so this has to be a separate install from the
+# PyPI-hosted packages below, or pip looks for all of them on download.pytorch.org.
+# torchvision is pinned here too (matching torch 2.8.0's CPU wheel) because
+# segmentation-models-pytorch below transitively depends on it - without pinning
+# it here, its second pip install pulls torchvision from default PyPI, which
+# drags the default CUDA torch build back in and undoes this CPU-only pin.
+RUN pip install --no-cache-dir torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir \
+        segmentation-models-pytorch==0.5.0 \
+        huggingface_hub==1.8.0 \
+        onnx==1.17.0
+
+COPY src/ ./src/
+
+RUN python -c "from src.waterseg.export_onnx import export; export('/export/model.onnx')"
+
+# ---- Runtime stage: only what's needed to actually run inference.
+# onnxruntime-gpu's own dependency metadata (unlike torch's - see problems.md)
+# only pulls cuDNN/cuBLAS/cuFFT/cuRAND/nvrtc via opt-in [cuda,cudnn] extras, not
+# an unconditional preload of the full CUDA toolkit's worth of libraries. Pinned
+# to 1.22.0 deliberately: it's the version confirmed (by inspecting its actual
+# pip metadata, not assumed) to target CUDA 12 - matching the driver requirement
+# already proven to work, rather than newer releases that moved to CUDA 13.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    "onnxruntime-gpu[cuda,cudnn]==1.22.0" \
+    rasterio==1.4.3 \
+    numpy==2.0.2 \
+    tqdm==4.70.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONUNBUFFERED=1
+
+COPY --from=exporter /export/model.onnx ./model.onnx
+COPY src/ ./src/
+
+# Actually constructs an InferenceSession (not just imports the module) - this is
+# the real test of whether ONNX Runtime falls back from CUDA to CPU gracefully
+# when no GPU is present, on this exact CPU-only build environment.
+RUN python -c "from src.waterseg.model_onnx import get_providers, load_session; load_session('model.onnx', get_providers())"
+
+ENTRYPOINT ["python", "-m", "src.waterseg.cli_onnx"]
