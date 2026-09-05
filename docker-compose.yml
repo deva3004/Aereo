@@ -6,6 +6,5 @@ services:
     image: waterbody-segmentation:latest
     volumes:
       - ./data:/data
-      
-    command: ["--input", "/data/input.tif", "--output", "/data/output.tif"] #passed at Dockerfile's enterypoint
-  
+
+    command: ["--input", "/data/input.tif", "--output", "/data/output.tif"] #passed at Dockerfile's entrypoint

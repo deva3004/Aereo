@@ -1,4 +1,9 @@
 
+# Build-time only: used exclusively by export_onnx.py, inside the Dockerfile's
+# builder stage, to construct the pretrained architecture and load its weights
+# so it can be traced to ONNX. Never imported at actual inference time - the
+# runtime path loads the exported model.onnx via model_onnx.py's ONNX Runtime
+# session instead, which is why this file and model_onnx.py both exist.
 import json
 
 import segmentation_models_pytorch as smp # build the Unet++ model with EfficientNet-B4 encoder

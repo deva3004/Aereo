@@ -1,22 +1,18 @@
 import numpy as np
-import torch
+import onnxruntime as ort
 
 NORMALIZE_SCALE = 255.0
 
 
 def predict_batch(
-    model: torch.nn.Module,
-    device: torch.device,
+    session: ort.InferenceSession,
     imgs: list[np.ndarray],
     tile_size: int,
     cores: list[tuple[slice, slice]],
 ) -> list[np.ndarray]:
-    """imgs: each (C, h, w) array read from a source raster window (h, w <= tile_size).
-
-    Batches tiles into one forward pass for throughput. Numerically identical to
-    predicting each tile alone: model.eval() (set in model.py) makes BatchNorm use
-    fixed running statistics rather than per-batch statistics, so one tile's
-    prediction doesn't depend on what else is in its batch.
+    """Normalizes each tile, zero-pads edge tiles up to tile_size, runs one
+    ONNX Runtime session.run() over the whole batch, and crops each result
+    back down to its tile's core region (see tiling.py for what 'core' means).
     """
     padded = []
     for img in imgs:
@@ -29,9 +25,7 @@ def predict_batch(
         padded.append(img)
 
     batch = np.stack(padded, axis=0)
-    tensor = torch.from_numpy(batch).to(device)
-    with torch.no_grad():
-        logits = model(tensor)
-        preds = torch.argmax(logits, dim=1).cpu().numpy().astype(np.uint8)
+    logits = session.run(["output"], {"input": batch})[0]
+    preds = np.argmax(logits, axis=1).astype(np.uint8)
 
     return [preds[i][row, col] for i, (row, col) in enumerate(cores)]

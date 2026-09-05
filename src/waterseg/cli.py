@@ -6,7 +6,7 @@ from .pipeline import run
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Batch waterbody segmentation inference")
+    parser = argparse.ArgumentParser(description="Batch waterbody segmentation inference (ONNX Runtime)")
     parser.add_argument("--input", required=True, help="Path to input GeoTIFF")
     parser.add_argument("--output", required=True, help="Path to write output mask GeoTIFF")
     args = parser.parse_args()

@@ -1,6 +1,17 @@
+# Not used by the Dockerfile - both its stages install pinned versions inline
+# (see comments there for why). This is for local/native dev only: running the
+# pipeline outside Docker, or regenerating model.onnx via export_onnx.py.
+
+# Runtime (pipeline.py, model_onnx.py, inference.py, cli.py)
+onnxruntime-gpu==1.22.0
 rasterio==1.4.3
 numpy==2.0.2
+tqdm==4.70.0
+
+# Export-only (export_onnx.py, model.py) - needed to regenerate model.onnx,
+# never touched by the actual runtime path
 torch==2.8.0
+torchvision==0.23.0
 segmentation-models-pytorch==0.5.0
 huggingface_hub==1.8.0
-tqdm==4.70.0
+onnx==1.17.0

@@ -1,10 +1,12 @@
 """Build-time only: exports the pretrained model to ONNX. Not part of the runtime
-inference path - runs once inside Dockerfile.onnx's builder stage, and the
+inference path - runs once inside the Dockerfile's builder stage, and the
 resulting model.onnx is what ships in the final image.
 
-Reuses model.load_model()/get_device() unchanged: this exports the exact same
-in-memory model object the PyTorch pipeline loads and runs, so there is still
-only one place in the codebase that constructs the model from the HF checkpoint.
+Reuses model.load_model()/get_device() unchanged: model.py's only remaining job
+is constructing the pretrained architecture and loading its weights from the HF
+checkpoint, purely so this script can trace it to ONNX here - it never runs at
+actual inference time. That keeps a single place in the codebase responsible for
+building the model from the HF checkpoint, rather than duplicating that logic.
 """
 
 import torch
