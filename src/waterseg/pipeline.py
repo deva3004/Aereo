@@ -19,6 +19,11 @@ OVERLAP = 256
 # without a rebuild.
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "8"))
 ONNX_MODEL_PATH = "model.onnx"  # baked into the image by the Dockerfile's builder stage
+# model.onnx was exported with a fixed 6-channel input shape (see export_onnx.py's
+# CHANNELS) - Sentinel-2 B2/B3/B4/B8/B11/B12. A different band count would
+# otherwise fail deep inside session.run(), tile by tile, with a much less
+# readable ONNX Runtime shape-mismatch error.
+EXPECTED_CHANNELS = 6
 
 
 def _batched(iterable, n):
@@ -37,13 +42,29 @@ def run(input_path: str, output_path: str) -> None:
     print(f"Using providers: {providers}")
     session = load_session(ONNX_MODEL_PATH, providers)
 
-    with rasterio.open(input_path) as src:
+    try:
+        src_context = rasterio.open(input_path)
+    except rasterio.errors.RasterioIOError as e:
+        raise SystemExit(f"Could not open input as a raster: {input_path} ({e})")
+
+    with src_context as src:
+        if src.count != EXPECTED_CHANNELS:
+            raise SystemExit(
+                f"Expected {EXPECTED_CHANNELS} bands (Sentinel-2 B2,B3,B4,B8,B11,B12), "
+                f"got {src.count} in {input_path}"
+            )
+
         profile = src.profile.copy()
         profile.update(count=1, dtype="uint8", nodata=None)
 
         tiles = generate_tiles(src.width, src.height, TILE_SIZE, OVERLAP)
 
-        with rasterio.open(output_path, "w", **profile) as dst:
+        try:
+            dst_context = rasterio.open(output_path, "w", **profile)
+        except rasterio.errors.RasterioIOError as e:
+            raise SystemExit(f"Could not open output path for writing: {output_path} ({e})")
+
+        with dst_context as dst:
             with tqdm(total=len(tiles), desc="Processing tiles") as pbar:
                 for batch in _batched(tiles, BATCH_SIZE):
                     imgs = [src.read(window=tile.read_window) for tile in batch]
